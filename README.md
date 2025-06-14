@@ -26,7 +26,7 @@ I will be working with this variables:
 
 `AST`: average assists per game
 
-<pre> ```r 
+```r 
   
 library(dplyr)
 library(ggplot2)
@@ -53,6 +53,6 @@ nba<- nba %>%
 
 colnames(nba)
   
-  ``` </pre>
+  ``` 
 
 
