@@ -26,3 +26,21 @@ I will be working with this variables:
 
 `AST`: average assists per game
 
+<pre> ```r 
+  
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(lme4)
+library(misty)
+library(texreg)
+library(ggrepel)
+library(tidyr)
+library(lattice)
+library(gridExtra)
+library(ggthemes)
+setwd("D:/RSTUDIOWD/papers")  
+  
+  ``` </pre>
+
+
