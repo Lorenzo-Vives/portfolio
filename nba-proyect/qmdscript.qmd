@@ -1,0 +1,419 @@
+---
+title: "nba-proyect"
+format: html
+editor: visual
+author: Lorenzo Vives
+---
+
+## NBA proyect
+
+Here you will find a little proyect about data analysis. Particularly, this proyect contains data manipulation, data visualization, OLS, Logit and MEM (Mixed Effects Models). I´m using an `nba` database which contains 5313 players from 1947-2025. You can find more details about this dataset [here](https://www.kaggle.com/datasets/flynn28/v2-nba-player-database/data).
+
+I will be working with this variables:
+
+`Name`: Players name
+
+`Position`: Players position(s)
+
+`Height`: Height of player (inches)
+
+`Weight`: Weight of player (lbs)
+
+`School`: School(s) player attended
+
+`Active`: If player is currently playing (True or False)
+
+`G`: amount of games played by player
+
+`PTS`: average points scored by player per game
+
+`TRB`: average rebounds by player per game
+
+`AST`: average assists per game
+
+## Research exercise 
+
+For this project, I will be analyzing the relationship between being a Center (here I will include those who can play two positions, for example Forward-Center or Center-Forward ) and scoring performance. Also, some predictors will be included, such as Games played, Height, Weight, average total asists per game (AST), average total rebounds per game (TRB).
+
+## Data and libraries 
+
+So, let's get into the data! We will be working with the following libraries. Then we load our NBA data.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(lme4)
+library(misty)
+library(texreg)
+library(ggrepel)
+library(tidyr)
+library(lattice)
+library(gridExtra)
+library(ggthemes)
+
+nba<- read.csv("https://github.com/Lorenzo-Vives/portfolio/blob/main/nba-proyect/NBA_PLAYERS.csv")
+```
+
+## Variable processing in R
+
+First, we clear our NA cases
+
+```{r}
+nba<- nba %>% 
+  na.omit()
+```
+
+Now, let's take a look at the variables in the dataset
+
+```{r}
+colnames(nba)
+```
+
+For the Schools, we display the 10 schools with most cases
+
+```{r}
+colnames(nba)
+nba %>% 
+count(School) %>% 
+  head(10)
+```
+
+Here we observe that the variable with most cases is not labeled, but is not a missed value either. This means that these players did not come from any School. We label this situation as \`street\`.
+
+```{r}
+nba <- nba %>%
+  mutate(School = ifelse(School == "" | is.na(School), "street", School))
+```
+
+For \`Height\` and \`Weight\` variables, we transform them to a real metric system :D
+
+```{r}
+nba<- nba %>% 
+  mutate(
+    Height_cm = Height * 2.54,
+    Weight_kg = Weight * 0.453592,
+    total_pts_carrer = PTS * G
+    )
+
+nba %>% 
+  summarise(
+    mean_pts = mean(PTS),
+    max_pts = max(PTS),
+    sd_pts = sd(PTS),
+    avg_height = mean(Height_cm),
+    avg_weight = mean(Weight_kg)
+  )
+```
+
+For \`Position\` variable, we display its values and then filter the variable to include only those cases in which players are listed as Center, Forward-Center or Center-Forward.
+
+```{r}
+nba %>% 
+  count(Position)
+
+nba %>% 
+  filter(Position %in% c("['Center', 'Forward']", "['Center']", "['Forward', 'Center']")) %>% 
+  group_by(Position) %>% 
+  summarise(AVG_PTS = mean(PTS))
+```
+
+Now we can explore our Centers
+
+```{r}
+nba %>% 
+  filter(Position %in% c("['Center', 'Forward']", "['Center']", "['Forward', 'Center']"),
+         Active == "True") %>%  
+  group_by(Position) %>% 
+  slice_max(order_by = PTS, n = 10) %>% 
+  select(Position, Name, PTS, Active, Height_cm, Weight_kg) %>% 
+  arrange(Position, desc(PTS))
+
+```
+
+Top 3 Centers
+
+```{r}
+nba %>% 
+  filter(Position %in% c("['Center', 'Forward']", "['Center']", "['Forward', 'Center']"),
+         Active == "True") %>%  
+  group_by(Position) %>% 
+  slice_max(order_by = PTS, n = 3) %>% 
+  select(Position, Name, PTS, Active, Height_cm, Weight_kg, G,total_pts_carrer) %>% 
+  arrange(Position, desc(PTS))
+```
+
+Before we jump into the inference analysis, we need to do some changes first:
+
+-   Rename the variable \`G\` to \`games\`
+
+-   Create a new variable called \`PTSCENTER\`, which contains the average points scored by active Centers in 2025
+
+-   Change the reference category for Position variable to "\['Center'\]"
+
+```{r}
+nba<- nba %>% 
+  mutate(
+    games = G,
+    PTSCENTER = case_when(
+      Position %in% c("['Center', 'Forward']", "['Center']", "['Forward', 'Center']") & Active == "True" ~ PTS
+    )
+  )
+```
+
+We create a new dataset for active Centers
+
+```{r}
+nba_centers <- nba %>%
+  filter(!is.na(PTSCENTER))
+```
+
+## Inference Analysis 
+
+For this part of the exercise, we estimate a linear regression model (OLS), which says as follows:
+
+$$
+AvgPointsScored_i = \beta_0 + \beta_1  Position_i + \beta_2Games_i + \beta_3Height_{cm_i} + \beta_4 Weight_{cm_i} + \\ \beta_5AvgAsist_i +  \beta_6AvgRebounds_i + \varepsilon_i
+$$
+
+We estimate model 1 and its fitted values
+
+```{r}
+m1<- lm(PTSCENTER ~ Position + games +Height_cm + Weight_kg + AST + TRB, data = nba_centers )
+screenreg(m1)
+
+nba_centers$fittedvalues <- predict(m1)
+```
+
+After that, we obtain the 10 highest fitted values and then we generate the plot
+
+```{r}
+nba_centers %>% 
+  select(Name, PTS, fittedvalues, Position) %>% 
+  slice_max(order_by = fittedvalues, n = 10) 
+
+
+nba_centers %>%
+  ggplot(aes(x = fittedvalues, y = PTS)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(
+    title = "Comparación entre puntos reales y predichos",
+    x = "Puntos predichos (fittedvalues)",
+    y = "Puntos reales (PTS)"
+  ) +
+  theme_bw()
+```
+
+## Logit Model
+
+For this part, we estimate a logit model. First things first, we obtain the average rebounds from the entire sample. Then we get the max and min rebounds values.
+
+```{r}
+nba_centers %>% 
+  summarise(
+    avg_rb = mean(TRB),
+    max = max(TRB),
+    min = min(TRB)
+  )
+```
+
+In the following step, we create a new variable called \`rb_dummy\` in which returns 1 if the player have an average of 6 or greater rebounds per game, and 0 if the total rebounds are less than 6.
+
+```{r}
+nba_centers <- nba_centers %>% 
+  mutate(
+    rb_dummy = case_when(
+      TRB >= 6 ~ 1,
+      TRB < 6 ~ 0
+    )
+  )
+```
+
+We estimate the logit model
+
+```{r}
+m2<- glm(rb_dummy ~  PTSCENTER + Position + games +Height_cm + Weight_kg + AST, data = nba_centers,
+         family = binomial (link = "logit") )
+screenreg(m2)
+```
+
+INTERPRETAR
+
+## Multilevel model (MEM)
+
+Finally, we estimate a multilevel model. In this part, we expand the sample to include all positions and players in the data base whether actives or not. Lastly, for the level-2 variables, we select the top 5 schools with the highest players in order to simplify the exercise.
+
+```{r}
+nba<- nba %>% 
+  mutate(
+    CENTERS = Position %in% c("['Center', 'Forward']", "['Center']", "['Forward', 'Center']")
+    )
+  
+top5_schools <- nba %>%
+  count(School, sort = TRUE) %>%
+  slice_max(n, n = 5) %>%
+  pull(School)
+  
+ 
+
+nba_top5_schools <- nba %>% 
+  filter(School %in% top5_schools) 
+
+nba_top5_schools %>% 
+  count(School, sort = T)
+```
+
+## Centrado
+
+Our interest is to
+
+```{r}
+nba_top5_schools$games_cgm <- center(nba_top5_schools$games, type = "CGM")
+nba_top5_schools$Height_cm_cgm <- center(nba_top5_schools$Height_cm, type = "CGM")
+nba_top5_schools$Weight_kg_cgm <- center(nba_top5_schools$Weight_kg, type = "CGM")
+nba_top5_schools$AST_cgm <- center(nba_top5_schools$AST, type = "CGM")
+nba_top5_schools$TRB_cgm <- center(nba_top5_schools$TRB, type = "CGM")
+```
+
+We estimate three models. First, the
+
+```{r}
+mnulo<- lmer(PTS ~ 1 + (1|School), data = nba_top5_schools)
+
+m3<- lmer(PTS ~ Position + games_cgm + Height_cm_cgm + Weight_kg_cgm + AST_cgm + TRB_cgm + (1|School)  , data = nba_top5_schools)
+
+
+m4<- lmer(PTS ~ Position + games_cgm + Height_cm_cgm + Weight_kg_cgm + AST_cgm + TRB_cgm + (TRB_cgm|School)  , data = nba_top5_schools)
+screenreg(list(mnulo,m3, m4), single.row = T)
+```
+
+Now we calculate the ICC
+
+```{r}
+ICC = 0.93/(0.93+29.32) * 100
+print(ICC)
+
+```
+
+Anova
+
+```{r}
+anova(m3,m4)
+```
+
+qqmath graph
+
+```{r}
+qqmath(ranef(mnulo, condVar = TRUE))
+```
+
+We plot model 3
+
+```{r}
+ggplot(nba_top5_schools, aes(x = TRB, y = PTS, color = School)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, size = 1) +
+  facet_wrap(~ School) +
+  labs(
+    title = "Relación TRB - PTS por School con líneas de regresión",
+    x = "Rebotes promedio",
+    y = "Puntos promedio",
+    color = "School"
+  ) +
+  theme_bw()
+```
+
+Model 4 plot
+
+```{r}
+# 1. Rangos TRB por School (variable original sin centrar)
+trb_ranges <- nba_top5_schools %>%
+  group_by(School) %>%
+  summarise(
+    min_TRB = min(TRB, na.rm = TRUE),
+    max_TRB = max(TRB, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2. Crear secuencia TRB para predecir (50 puntos entre min y max)
+new_data <- trb_ranges %>%
+  rowwise() %>%
+  mutate(TRB = list(seq(min_TRB, max_TRB, length.out = 50))) %>%
+  unnest(cols = c(TRB)) %>%  # Para tidyr >= 1.0.0 usar cols= c()
+  ungroup()
+
+# 3. Calcular promedios por School y Position para las demás variables originales sin centrar
+promedios <- nba_top5_schools %>%
+  group_by(School, Position) %>%
+  summarise(
+    games = mean(games, na.rm = TRUE),
+    Height_cm = mean(Height_cm, na.rm = TRUE),
+    Weight_kg = mean(Weight_kg, na.rm = TRUE),
+    AST = mean(AST, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Calcular posición modal (más frecuente) por School
+pos_mode <- nba_top5_schools %>%
+  count(School, Position) %>%
+  group_by(School) %>%
+  slice_max(n, n = 1) %>%
+  select(School, Position) %>%
+  ungroup()
+
+# 5. Unir posición modal con promedios
+promedios_mod <- left_join(pos_mode, promedios, by = c("School", "Position"))
+
+# 6. Unir con new_data por School
+new_data <- left_join(new_data, promedios_mod, by = "School")
+
+# 7. Centrar variables continuas en new_data con la gran media de nba_top5_schools
+# Calcular medias globales (usadas para centrar)
+medias_globales <- nba_top5_schools %>%
+  summarise(
+    games_m = mean(games, na.rm = TRUE),
+    Height_cm_m = mean(Height_cm, na.rm = TRUE),
+    Weight_kg_m = mean(Weight_kg, na.rm = TRUE),
+    AST_m = mean(AST, na.rm = TRUE),
+    TRB_m = mean(TRB, na.rm = TRUE)
+  )
+
+# Añadir variables centradas
+new_data <- new_data %>%
+  mutate(
+    games_cgm = games - medias_globales$games_m,
+    Height_cm_cgm = Height_cm - medias_globales$Height_cm_m,
+    Weight_kg_cgm = Weight_kg - medias_globales$Weight_kg_m,
+    AST_cgm = AST - medias_globales$AST_m,
+    TRB_cgm = TRB - medias_globales$TRB_m
+  )
+
+# 8. Asegurar que Position es factor con niveles correctos
+new_data$Position <- factor(new_data$Position, levels = levels(nba_top5_schools$Position))
+
+# 9. Predecir PTS con el modelo m4 usando efectos aleatorios (por School)
+new_data$PTS_pred <- predict(m4, newdata = new_data, re.form = NULL)
+
+# 10. Gráfico
+ggplot() +
+  geom_point(data = nba_top5_schools, aes(x = TRB, y = PTS, color = School), alpha = 0.5) +
+  geom_line(data = new_data, aes(x = TRB, y = PTS_pred, color = School), size = 1) +
+  facet_wrap(~ School) +
+  labs(
+    title = "Predicción de PTS según TRB y otras variables, por School",
+    x = "Rebotes Totales (TRB)",
+    y = "Puntos (PTS)",
+    color = "School"
+  ) +
+  theme_bw()
+```
+
+Lastly, we obtain the intercept of each model.
+
+```{r}
+interceptos<- ranef(m4) %>% print()
+
+interceptos1<- ranef(m3) %>% print()
+
+```
