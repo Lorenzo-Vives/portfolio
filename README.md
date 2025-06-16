@@ -1,58 +1,9 @@
 # Portfolio
 Welcome to my portfolio! 
 
-Here you will find a little proyect about data analysis. Particularly, this proyect contains data manipulation, data visualization, OLS, Logit and MEM (Mixed Effects Models).
-I´m using an  `nba` database which contains 5313 players from 1947-2025. You can find more details about this dataset [here](https://www.kaggle.com/datasets/flynn28/v2-nba-player-database/data).
+Hi! I'm Lorenzo Vives, an enthusiastic Sociologist and Data Analyst. Here you will find some projects in *R*, *Python*, *Excel*, *Power BI*, and *SQL*. 
 
-I will be working with this variables:
-
-`Name`: Players name
-
-`Position`: Players position(s)
-
-`Height`: Height of player (inches)
-
-`Weight`: Weight of player (lbs)
-
-`School`: School(s) player attended
-
-`Active`: If player is currently playing (True or False)
-
-`G`: amount of games played by player
-
-`PTS`: average points scored by player per game
-
-`TRB`: average rebounds by player per game
-
-`AST`: average assists per game
-
-```r 
-  
-library(dplyr)
-library(ggplot2)
-library(scales)
-library(lme4)
-library(misty)
-library(texreg)
-library(ggrepel)
-library(tidyr)
-library(lattice)
-library(gridExtra)
-library(ggthemes)
-setwd("D:/RSTUDIOWD/papers")  
-  nba<- read.csv("NBA_PLAYERS.csv")
-
-#----trabajo de variables----
-
-#eliminamos los na
-nba<- nba %>% 
-  na.omit()
-
-
-#desplegamos las variables
-
-colnames(nba)
-  
-  ``` 
+* [NBA-project](https://raw.githubusercontent.com/Lorenzo-Vives/portfolio/refs/heads/main/nba-proyect/qmdscript1%20(2).ipynb?token=GHSAT0AAAAAADFGABGLQERT6EPHNQOWBMYG2CPP25Q)
+Using NBA player data, this project explores data manipulation, visualization, OLS and logistic regression, as well as mixed effects models (MEMs)
 
 
